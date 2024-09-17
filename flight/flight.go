@@ -2,6 +2,7 @@ package flight
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -131,6 +132,13 @@ func (f flightHandler) GetById(c *gin.Context) {
 	)
 	if err != nil {
 		log.Print(err)
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("not found flight id %v", id),
+			})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
@@ -151,6 +159,36 @@ func (f flightHandler) UpdateById(c *gin.Context) {
 	}
 
 	var flight Flight
+	stmt, err := f.db.Prepare("SELECT id, number, airline_code, destination, arrival FROM flights WHERE id=$1")
+	if err != nil {
+		log.Print(err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	err = stmt.QueryRow(id).Scan(&flight.ID,
+		&flight.Number,
+		&flight.AirlineCode,
+		&flight.Destination,
+		&flight.Arrival,
+	)
+	if err != nil {
+		log.Print(err)
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("not found flight id %v", id),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
 	err = c.ShouldBindJSON(&flight)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -161,7 +199,7 @@ func (f flightHandler) UpdateById(c *gin.Context) {
 
 	flight.ID = id
 
-	stmt, err := f.db.Prepare("UPDATE flights SET number=$1, airline_code=$2, destination=$3, arrival=$4 WHERE id=$5")
+	stmt, err = f.db.Prepare("UPDATE flights SET number=$1, airline_code=$2, destination=$3, arrival=$4 WHERE id=$5")
 	if err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -192,7 +230,38 @@ func (f flightHandler) DeleteById(c *gin.Context) {
 		return
 	}
 
-	stmt, err := f.db.Prepare("DELETE FROM flights WHERE id=$1")
+	stmt, err := f.db.Prepare("SELECT id, number, airline_code, destination, arrival FROM flights WHERE id=$1")
+	if err != nil {
+		log.Print(err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	var flight Flight
+	err = stmt.QueryRow(id).Scan(&flight.ID,
+		&flight.Number,
+		&flight.AirlineCode,
+		&flight.Destination,
+		&flight.Arrival,
+	)
+	if err != nil {
+		log.Print(err)
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("not found flight id %v", id),
+			})
+			return
+		}
+		
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	stmt, err = f.db.Prepare("DELETE FROM flights WHERE id=$1")
 	if err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -210,5 +279,5 @@ func (f flightHandler) DeleteById(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusNoContent, gin.H{})
+	c.JSON(http.StatusNoContent, nil)
 }
